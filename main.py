@@ -1,8 +1,6 @@
-import os
+import os, ssl, smtplib
 from datetime import date,datetime
 
-import smtplib
-import ssl
 from email.message import EmailMessage
 from email.utils import formataddr
 from pathlib import Path
@@ -11,6 +9,7 @@ from dotenv import load_dotenv
 
 from pyairtable import Api
 from apscheduler.schedulers.blocking import BlockingScheduler
+from cachetools import TTLCache
 
 
 
@@ -26,6 +25,7 @@ load_dotenv(envars)
 # create env file and fill the required details
 email_sender = os.getenv("EMAIL")
 email_password = os.getenv("PASSWORD")
+email_receiver="mauryaabhay1213@gmail.com"
 
 
 # fetching api
@@ -35,25 +35,28 @@ table_id='tblWa8tXHQJtA6eHZ'  #replace the airtable email id
 table = api.table(base_id,table_id)
 records=table.all()
 
+#using cache to store recently sent ids
+cache = TTLCache(maxsize=1000, ttl=3600)
 
 
-
-def send_email(subject,to_name,email_receiver): 
+def send_email(): 
     msg=EmailMessage()
-    msg["Subject"]=subject
+    msg["Subject"]='subject'
     msg["From"]=formataddr(("FOSSCU-KIET",f'{email_sender}')) # change the title of mail
     msg["To"]=email_receiver
     msg["BCC"]=email_sender
+    to_name="Gaurav Sir"
 
+    records=table.all()
     present=date.today()
     email_count=0
     for record in records:
+        id=record['id']
+        if id in cache:
+              continue
         field=record["fields"]
         date_object = datetime.strptime(field.get("Date"), "%d-%m-%Y").date()
-
-        if (present >= date_object)and(not(field.get("Status")=="sent")):
-                subject="subject"
-                email_receiver="rvinayak108@gmail.com"  #replace with email whom to send
+        if (present >= date_object)and(field.get("Status")!="sent"):
                 name=field.get("Name")
                 project=field.get("Project Name")
                 link=field.get("Link")
@@ -76,18 +79,27 @@ def send_email(subject,to_name,email_receiver):
                             server.login(email_sender, email_password)
                             server.sendmail(email_sender, email_receiver, msg.as_string())
                             print("Email sent successfully!")
+                            table.update(id, {"Status": "sent"})
+                            cache[id] = True
                 except (smtplib.SMTPException, smtplib.SMTPSenderRefused) as error:
                     print(f"Error sending email: {error}")
                 email_count+=1
-        
+    
     print(f"Total emails sent:{email_count}")
 
 
+def schedule_emails():
+    sched = BlockingScheduler()
+    sched.add_job(send_email, 'interval',day_of_week='mon', minutes=10)
+    sched.start()
 
 
 if __name__ == "__main__":
-    send_email(
-        subject="subject",
-        to_name="Gaurav Sir",
-        email_receiver="rvinayak108@gmail.com",   #replace with email whom to send
-    )
+        schedule_emails()
+
+
+
+
+
+
+        
