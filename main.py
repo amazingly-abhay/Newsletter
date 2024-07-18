@@ -90,7 +90,7 @@ def send_email():
 
 def schedule_emails():
     sched = BlockingScheduler()
-    sched.add_job(send_email, 'interval',day_of_week='mon', minutes=10)
+    sched.add_job(send_email, 'cron',day_of_week='mon', hour=10)
     sched.start()
 
 
